@@ -1,31 +1,24 @@
 ﻿namespace StructureExtraction
 {
     using System;
-    using System.Globalization;
+    using System.Collections.Generic;
     using System.IO;
-    using Microsoft.ProgramSynthesis.Extraction.Text;
-    using Microsoft.ProgramSynthesis.Extraction.Text.Constraints;
-    using Microsoft.ProgramSynthesis.Extraction.Text.Semantics;
-    using Microsoft.ProgramSynthesis.Transformation.Text;
-    using Microsoft.ProgramSynthesis.Wrangling.Session;
 
     public class Program
     {
         public static void Main(string[] args)
         {
-            string trainingFolderPath = @"C:\Shared\FormatExtraction\prose_training";
-            string testFolderPath = @"C:\Shared\FormatExtraction\prose_test";
+            string trainingFolderPath = @"F:\Hackathon\FormatExtraction\train";
+            string testFolderPath = @"F:\Hackathon\FormatExtraction\score";
             var trainingFolder = new DirectoryInfo(trainingFolderPath);
 
-            var extractionSession = new RegionSession();
-            var transformationSession = new Session();
+            var examples = new List<Tuple<string, uint, uint>>();
         
-            foreach (FileInfo trainingFile in trainingFolder.EnumerateFiles())
+            foreach (var trainingFile in trainingFolder.EnumerateFiles())
             {
                 using (var sr = new StreamReader(trainingFile.OpenRead()))
                 {
                     var exampleContent = sr.ReadToEnd().ToLowerInvariant();
-                    var stringRegion = new StringRegion(exampleContent, Semantics.Tokens);
 
                     if (exampleContent.IndexOf("ADMISSION DATE :\n", StringComparison.OrdinalIgnoreCase) < 0)
                     {
@@ -34,52 +27,34 @@
 
                     int startIndex = exampleContent.IndexOf("ADMISSION DATE :\n", StringComparison.OrdinalIgnoreCase) + "ADMISSION DATE :\n".Length;
                     int endIndex = startIndex + exampleContent.Substring(startIndex).IndexOf("\n");
-                    var field = stringRegion.Slice((uint)startIndex, (uint)endIndex);
-                    var example = new RegionExample(stringRegion, field);
-                    extractionSession.AddConstraints(example);
-
-                    DateTime date;
-                    if (DateTime.TryParse(field.Value, out date))
-                    {
-                        transformationSession.AddConstraints(new Example(new InputRow(field.Value), date.ToString("d")));
-                    }
-                    else
-                    {
-                        date = DateTime.ParseExact(field.Value, "yyyyMMdd", CultureInfo.InvariantCulture);
-                        transformationSession.AddConstraints(new Example(new InputRow(field.Value), date.ToString("d")));
-                    }
-
-                    Console.Out.WriteLine($"Sample, file: {trainingFile.Name}. Content: {field}, Date: {date.ToString("d")}");
+                    examples.Add(Tuple.Create(exampleContent, (uint)startIndex, (uint)endIndex));
                 }
             }
 
             Console.Out.WriteLine();
             Console.Out.Write("Learning...");
-            var program = extractionSession.Learn(RankingMode.MostLikely);
-            var tProgram = transformationSession.Learn();
-
-            if (null == program)
-            {
-                Console.Out.WriteLine("No program found.");
-                return;
-            }
-
+            var extractor = StructureExtractor.TrainExtractorAsync(examples).Result;
             Console.Out.WriteLine(" Done");
             Console.Out.WriteLine();
 
+            var scoreContents = new List<Document>();
             // Test on real samples
-            foreach (FileInfo testFile in new DirectoryInfo(testFolderPath).EnumerateFiles())
+            foreach (var testFile in new DirectoryInfo(testFolderPath).EnumerateFiles())
             {
                 using (var sr = new StreamReader(testFile.OpenRead()))
                 {
-                    var testInput = RegionSession.CreateStringRegion(sr.ReadToEnd().ToLowerInvariant());
-                    var output = program.Run(testInput);
-                    var datetime = tProgram.Run(new InputRow(output.Value));
-                    Console.Out.WriteLine($"Output for file {testFile.Name}: {output}. Date: {datetime}");
+                    scoreContents.Add(new Document {
+                        Id = testFile.Name,
+                        Content = sr.ReadToEnd().ToLowerInvariant()
+                    });
                 }
             }
 
-            Console.Out.WriteLine($"Program {program.Serialize()}");
+            var extractions = extractor.Extract(scoreContents).Result;
+            foreach (var extraction in extractions)
+            {
+                Console.Out.WriteLine($"File: {extraction.Id}, Extract: {extraction.Content}");
+            }
         }
     }
 }
