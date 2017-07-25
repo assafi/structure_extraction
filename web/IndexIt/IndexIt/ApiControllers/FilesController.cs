@@ -21,8 +21,14 @@ namespace IndexIt.ApiControllers
     {
         public string file;
         public string field;
-        public int startPos;
-        public int endPos;
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? startPos;
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? endPos;
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string text;
     }
 
@@ -198,7 +204,14 @@ namespace IndexIt.ApiControllers
         public RuleText Get(int sid, string file, string rule = null)
         {
             var rules = LoadRules(sid);
-            rules.value = rules.value.Where(r => r.file == file).ToList();
+            var filteredRules = rules.value.Where(r => r.file == file).ToList();
+
+            // generate dummy placeholder rules where none had actually been defined for this file yet
+            var placeholderRules = rules.value.Select(r => r.field).Distinct()
+                .Except(filteredRules.Select(r => r.field))
+                .Select(field => new Rule { file = file, field = field } );
+
+            rules.value = filteredRules.Concat(placeholderRules).ToList();
             return rules;
         }
 

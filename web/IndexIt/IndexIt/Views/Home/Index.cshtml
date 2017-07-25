@@ -78,9 +78,19 @@
         currentrules.forEach(function (val) {
             if (val.file != activefile) console.error("rules not filtered out for file");
             var ruleid = "rule_" + val.field;
-            var html = "<li><span id='" + ruleid + "'>" + val.field + "= " + val.text + " (at " + val.startPos + "," + val.endPos + ")</span></li>";
+            var html = "<li><span id='" + ruleid + "'>";
+            html += val.field;
+            if (val.startPos !== undefined) html = html + " (at " + val.startPos + "," + val.endPos + ");"
+            var buttonid = "rule_" + val.field;
+            var onclick = "selectRule('" + val.field + "'); return true;";
+            html += "</span ><button title=\"edit rule\" + id=\"" + buttonid + "\" onclick=\"" + onclick + "\"><span>Edit</span></button></li >";
+            if (activerule == val.field) { html += "<span>(selected)</span>"; }
             ruleList.append(html);
         });
+    }
+    function selectRule(ruleName) {
+        activerule = ruleName;
+        refreshRules();
     }
     function addRule() {
         var ruleName = $(".rulename")[0].value;
