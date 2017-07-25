@@ -1,0 +1,141 @@
+﻿@{
+    ViewBag.Title = "Home Page";
+}
+
+<script>
+    var sessionid = 0;
+    var activefile = "@(ViewBag.Doc)";
+    var currentrules = [];
+    var activerule = "";
+    $(document).ready(function () {
+        if (activefile) {
+            // Get rules
+            $.ajax({
+                method: "GET",
+                url: "/s/" + sessionid + "/files/" + activefile + "/rules/",
+                accepts: "application/json",
+                dataType: "json",
+                error: function (a, b, c) { alert(a + b + c); },
+                success: function (data, b, c) {
+                    gotRules(data);
+                }
+            })
+            // Get file
+            $.ajax({
+                method: "POST",
+                url: "/s/" + sessionid + "/files/" + activefile,
+                accepts: "application/json",
+                dataType: "json",
+                error: function (a, b, c) { alert(a + b + c); },
+                success: function (data, b, c) {
+                    var docholder = $(".docholder > p"); 
+                    docholder.children().remove();
+                    data.value.forEach(function (val) {
+                        if (val.text === "\n") {
+                            docholder.append("<br/>")
+                        }
+                        else {
+                            var link = "#" + val.startPos + "&" + val.endPos + "&" + val.text;
+                            var onclick = "clickWord(" + val.startPos + "," + val.endPos + ",'" + val.text + "'); return true;";
+                            var html = "<a class=\"word\" href=\"" + link + "\" onclick=\"" + onclick + "\"><span>" + val.text + "</span></a>&nbsp;";
+                            docholder.append(html);
+                        }
+                    });
+                }
+            })
+        }
+    })
+    function gotRules(data) {
+        console.info("gotRules" + JSON.stringify(data));
+        currentrules = data.value;
+        refreshRules();
+    }
+    function refreshRules() {
+        // update UI to match rules from server
+        var ruleList = $(".rules");
+        ruleList.children().remove();
+        currentrules.forEach(function (val) {
+            if (val.file != activefile) console.error("rules not filtered out for file");
+            var ruleid = "rule_" + val.field;
+            var html = "<li><span id='" + ruleid + "'>" + val.field + "= " + val.text + " (at " + val.startPos + "," + val.endPos + ")</span></li>";
+            ruleList.append(html);
+        });
+    }
+    function addRule() {
+        var ruleName = $(".rulename")[0].value;
+        // update UI with placeholder new rule
+        var ruleobj = currentrules.find(function (r) { r.field == ruleName });
+        if (ruleobj !== undefined) {
+            throw "oops, rule already exists";
+        }
+        activerule = ruleName;
+        currentrules.push(ruleobj = ({
+            file: activefile,
+            field: activerule,
+        }));
+        refreshRules();
+    }
+    function updateRule(ruleObj) {
+        // update rule state, send to server...
+        console.info("send server rule " + JSON.stringify(ruleObj));
+        $.ajax({
+            method: "PUT",
+            url: "/s/" + sessionid + "/files/" + ruleObj.file + "/rules/" + ruleObj.field,
+            contentType: "application/json",
+            accepts: "application/json",
+            dataType: "json",
+            data: JSON.stringify(ruleObj),
+            error: function (a, b, c) { alert(a + b + c); },
+            success: function (data, b, c) {
+                // use server response to refresh rules UI
+                gotRules(data);
+            }
+        });
+    }
+    function clickWord(startPos, endPos, text) {
+        console.info("clicked '" + text + "' at " + startPos + "," + endPos);
+        if (activerule === undefined) {
+            activerule = "newrule";
+        }
+        var ruleobj = currentrules.find(function (r) { return r.field === activerule; });
+        if (ruleobj === undefined) {
+            ruleobj = ({
+                file: activefile,
+                field: activerule,
+            });
+            currentrules.push(ruleobj);
+        }
+        if (ruleobj.startPos === undefined) ruleobj.startPos = startPos;
+        else if (ruleobj.endPos === undefined) ruleobj.endPos = endPos;
+
+        // send update to server?
+        if (ruleobj.startPos !== undefined && ruleobj.endPos != undefined) {
+            updateRule(ruleobj);
+        }
+        else setTimeout(refreshRules, 20);
+    }
+</script>
+
+<div class="container" style="width: 100pc">
+    <div style="margin-left: 0; width: 300px; height: 600px; float: left">
+        <div style="margin-left: 0; width: 300px; height: 300px; overflow: auto; ">
+            <nav>
+                @foreach (var doc in ViewBag.Documents)
+                {
+                    <ul>
+                        <li><a href="/Home/Index/@(doc)"><span>@(doc)</span></a></li>
+                    </ul>
+                }
+            </nav>
+        </div>
+        <div class="ruleholder "style="margin-left: 0; width: 300px; height: 300px; overflow: auto; ">
+            <input class="rulename" type="text" maxlength="512" />
+            <button class="addrule" title="add rule" onclick="addRule(); return true;"><span>add rule</span></button>
+            <ul class="rules">
+            </ul >
+        </div>
+    </div>
+    <div class="docholder" style="margin-left: 25pc; width: 65pc; height: 300px; ">
+        <p/>
+    </div>
+</div>
