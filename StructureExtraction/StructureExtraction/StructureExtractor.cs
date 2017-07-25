@@ -43,9 +43,11 @@ namespace StructureExtraction
             {
                 regionSession.AddInputs(noneLabeledExamples.Select(e => new StringRegion(e, Semantics.Tokens)));
             }
-            
 
-            var program = await regionSession.LearnAsync();
+
+            //var program = await regionSession.LearnAsync();
+            await Task.FromResult(0);
+            var program = regionSession.Learn();
             if (null == program)
             {
                 throw new Exception("No program found");
@@ -54,16 +56,38 @@ namespace StructureExtraction
             return new StructureExtractor(program);
         }
 
-        public async Task<IEnumerable<Document>> Extract(IEnumerable<Document> documents)
+        public async Task<IEnumerable<Document>> ExtractAsync(IEnumerable<Document> documents)
         {
             var tasks =
                 documents.Select(d => Task.Run(
-                    () => new Document {
-                        Id = d.Id,
-                        Content = this.proseProgram.Run(new StringRegion(d.Content, Semantics.Tokens))?.Value ?? ""
+                    () =>
+                    {
+                        var result = this.proseProgram.Run(new StringRegion(d.Content, Semantics.Tokens));
+                        return new Document
+                        {
+                            Id = d.Id,
+                            Content = result?.Value ?? "",
+                            Start = result != null ? (int)result.Start : -1,
+                            End = result != null ? (int)result.End : -1,
+                        };
                     }));
 
             return await Task.WhenAll(tasks);
+        }
+
+        public IEnumerable<Document> Extract(IEnumerable<Document> documents)
+        {
+            return documents.Select(d =>
+            {
+                var result = this.proseProgram.Run(new StringRegion(d.Content, Semantics.Tokens));
+                return new Document
+                {
+                    Id = d.Id,
+                    Content = result?.Value ?? "",
+                    Start = result != null ? (int)result.Start : -1,
+                    End = result != null ? (int)result.End : -1,
+                };
+            });
         }
     }
 }

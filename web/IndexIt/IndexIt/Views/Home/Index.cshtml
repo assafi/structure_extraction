@@ -15,18 +15,22 @@
                 url: "/s/" + sessionid + "/files/" + activefile + "/rules/",
                 accepts: "application/json",
                 dataType: "json",
-                error: function (a, b, c) { alert(a + b + c); },
+                error: function (a, b, c) {
+                    alert(a + b + c);
+                },
                 success: function (data, b, c) {
                     gotRules(data);
                 }
             })
-            // Get file
+            // Get file [and matches from current rules]
             $.ajax({
                 method: "POST",
                 url: "/s/" + sessionid + "/files/" + activefile,
                 accepts: "application/json",
                 dataType: "json",
-                error: function (a, b, c) { alert(a + b + c); },
+                error: function (a, b, c) {
+                    alert(a + b + c);
+                },
                 success: function (data, b, c) {
                     var docholder = $(".docholder > p"); 
                     docholder.children().remove();
@@ -37,14 +41,31 @@
                         else {
                             var link = "#" + val.startPos + "&" + val.endPos + "&" + val.text;
                             var onclick = "clickWord(" + val.startPos + "," + val.endPos + ",'" + val.text + "'); return true;";
-                            var html = "<a class=\"word\" href=\"" + link + "\" onclick=\"" + onclick + "\"><span>" + val.text + "</span></a>&nbsp;";
+                            var id = "word_" + val.startPos;
+                            var html = "<a class=\"word\" id=\"" + id + "\" href=\"" + link + "\" onclick=\"" + onclick + "\"><span>" + val.text + "</span></a>&nbsp;";
                             docholder.append(html);
+                        }
+                    });
+                    data.matches.forEach(function (match) {
+                        if (!(match.failed)) {
+                            var htmlColor = getRandomColor();
+                            $("#word_" + match.startPos)
+                                .attr("style", "background-color:" + htmlColor);
+                                //.wrap("<span style='background-color=" + htmlColor + "'/>");
                         }
                     });
                 }
             })
         }
     })
+    function getRandomColor() {
+        var letters = '0123456789ABCDEF';
+        var color = '#';
+        for (var i = 0; i < 6; i++) {
+            color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+    }
     function gotRules(data) {
         console.info("gotRules" + JSON.stringify(data));
         currentrules = data.value;
@@ -85,7 +106,9 @@
             accepts: "application/json",
             dataType: "json",
             data: JSON.stringify(ruleObj),
-            error: function (a, b, c) { alert(a + b + c); },
+            error: function (a, b, c) {
+                alert(a + b + c);
+            },
             success: function (data, b, c) {
                 // use server response to refresh rules UI
                 gotRules(data);

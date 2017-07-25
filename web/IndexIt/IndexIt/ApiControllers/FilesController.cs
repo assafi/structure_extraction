@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Web.Http;
 using Newtonsoft.Json;
+using StructureExtraction;
 
 namespace IndexIt.ApiControllers
 {
@@ -96,7 +97,13 @@ namespace IndexIt.ApiControllers
             else fileText = _fileCache[file];
             return fileText;
         }
-        
+
+        [NonAction]
+        List<string> GetFileNames()
+            => Directory.EnumerateFiles(trainingDir)
+            .Select(f => Path.GetFileNameWithoutExtension(f))
+            .ToList();
+
         [NonAction]
         List<Match> GetMatches(int sid, string file)
         {
@@ -106,19 +113,48 @@ namespace IndexIt.ApiControllers
             foreach (var ruleGroup in rules.value.GroupBy(r => r.field))
             {
                 var field = ruleGroup.Key;
-                var instances = ruleGroup.AsEnumerable();
-                foreach(var instance in instances)
+                var instances = ruleGroup.ToArray();
+                //var unmatchedFiles = GetFileNames().Except(instances.Select(inst => inst.file)).Distinct().ToArray();
+                if (instances.Any())
                 {
-                    //TODO!...
-                }
-                dynamic program = null; //TODO;
-                try
-                {
-                    //var result = program.Match(fileText) //TODO:!!
-                }
-                catch (Exception e)
-                {
-                    ret.Add(new Match { file = file, field = field, failed = true });
+                    var trainingExamples = instances
+                        .Select(i => Tuple.Create(GetFileText(i.file), (uint)i.startPos, (uint)i.endPos))
+                        .ToList();
+                    string actualText = null;
+                    try
+                    {
+                        var extractor = StructureExtractor.TrainExtractorAsync(
+                            trainingExamples,
+                            null).Result;
+                        var match = extractor.Extract(new Document[] {
+                        new Document { Id = file, Content = fileText } }).FirstOrDefault();
+                        actualText = match?.Content;
+                        if (actualText != null && match.Start >= 0)
+                        {
+                            string expectedText = fileText.Substring(match.Start, match.End - match.Start);
+                            ret.Add(
+                                new Match
+                                {
+                                    file = file,
+                                    field = field,
+                                    failed = false,
+                                    startPos = match.Start,
+                                    endPos = match.End,
+                                    text = actualText
+                                }
+                                );
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+
+                    if (String.IsNullOrEmpty(actualText))
+                    {
+                        ret.Add(
+                            new Match { file = file, field = field, failed = true }
+                            );
+                    }
                 }
             }
             return ret;

@@ -50,7 +50,7 @@
                 }
             }
 
-            var extractions = extractor.Extract(scoreContents).Result;
+            var extractions = extractor.ExtractAsync(scoreContents).Result;
             foreach (var extraction in extractions)
             {
                 Console.Out.WriteLine($"File: {extraction.Id}, Extract: {extraction.Content}");
