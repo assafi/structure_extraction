@@ -188,7 +188,7 @@
         }
         if (ruleobj.startPos === undefined)
             ruleobj.startPos = startPos;
-        else if (ruleobj.endPos === undefined && ruleobj.endPos > ruleobj.startPos)
+        else if (ruleobj.endPos === undefined && endPos > ruleobj.startPos)
             ruleobj.endPos = endPos;
 
         // send update to server?
