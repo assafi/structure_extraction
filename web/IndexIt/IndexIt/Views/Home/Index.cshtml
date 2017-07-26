@@ -42,7 +42,7 @@
                             var link = "#" + val.startPos + "&" + val.endPos + "&" + val.text;
                             var onclick = "clickWord(" + val.startPos + "," + val.endPos + ",'" + val.text + "'); return true;";
                             var id = "word_" + val.startPos;
-                            var html = "<a class=\"word\" id=\"" + id + "\" href=\"" + link + "\" onclick=\"" + onclick + "\"><span>" + val.text + "</span></a>&nbsp;";
+                            var html = "<a class=\"word\" id=\"" + id + "\" href=\"" + link + "\" onclick=\"" + onclick + "\"><span>" + val.text + " </span></a>";
                             docholder.append(html);
                         }
                     });
