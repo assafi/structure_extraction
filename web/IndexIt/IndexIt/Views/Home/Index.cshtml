@@ -186,8 +186,10 @@
             });
             currentrules.push(ruleobj);
         }
-        if (ruleobj.startPos === undefined) ruleobj.startPos = startPos;
-        else if (ruleobj.endPos === undefined) ruleobj.endPos = endPos;
+        if (ruleobj.startPos === undefined)
+            ruleobj.startPos = startPos;
+        else if (ruleobj.endPos === undefined && ruleobj.endPos > ruleobj.startPos)
+            ruleobj.endPos = endPos;
 
         // send update to server?
         if (ruleobj.startPos !== undefined && ruleobj.endPos != undefined) {
