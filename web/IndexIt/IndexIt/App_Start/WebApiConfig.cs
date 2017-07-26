@@ -7,6 +7,8 @@ namespace IndexIt
 {
     public static class WebApiConfig
     {
+        public static int DefaultSid = 1;
+        
         public static void Register(HttpConfiguration config)
         {
             // Web API configuration and services
@@ -20,7 +22,7 @@ namespace IndexIt
                 defaults: new
                 {
                     controller = "Files",
-                    sid = 0,
+                    sid = DefaultSid,
                     file = RouteParameter.Optional,
                 }
             );
@@ -33,7 +35,7 @@ namespace IndexIt
                      controller = "Files",
                      action = "Rename",
                      file = RouteParameter.Optional,
-                     sid = 0,
+                     sid = DefaultSid,
                  }
              );
 
@@ -43,7 +45,7 @@ namespace IndexIt
                 defaults: new
                 {
                     controller = "Files",
-                    sid = 0,
+                    sid = DefaultSid,
                     file = RouteParameter.Optional,
                     rule = RouteParameter.Optional,
                 }

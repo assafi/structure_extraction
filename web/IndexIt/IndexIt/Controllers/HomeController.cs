@@ -43,6 +43,7 @@ namespace IndexIt.Controllers
                 }
                 ViewBag.P1 = p1;
                 ViewBag.P2 = p2;
+                ViewBag.Sid = WebApiConfig.DefaultSid;
                 try
                 {
                     var json = System.IO.File.ReadAllText(outputsSpecPath);
