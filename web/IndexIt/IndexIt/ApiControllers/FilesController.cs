@@ -247,7 +247,7 @@ namespace IndexIt.ApiControllers
             }
             else rules.value.Add(newRule);
             SaveRules(sid, rules);
-            return LoadRules(sid);
+            return Get(sid, file);
         }
 
         // DELETE rule
@@ -262,7 +262,7 @@ namespace IndexIt.ApiControllers
                 rules.value.RemoveAt(index);
             }
             SaveRules(sid, rules);
-            return LoadRules(sid);
+            return Get(sid, file);
         }
     }
 }
