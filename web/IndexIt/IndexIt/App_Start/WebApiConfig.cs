@@ -7,7 +7,7 @@ namespace IndexIt
 {
     public static class WebApiConfig
     {
-        public static int DefaultSid = 1;
+        public static int DefaultSid = 3;
         
         public static void Register(HttpConfiguration config)
         {
