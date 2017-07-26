@@ -44,13 +44,30 @@ namespace StructureExtraction
                 regionSession.AddInputs(noneLabeledExamples.Select(e => new StringRegion(e, Semantics.Tokens)));
             }
 
-
             //var program = await regionSession.LearnAsync();
             await Task.FromResult(0);
             var program = regionSession.Learn();
             if (null == program)
             {
-                throw new Exception("No program found");
+                // Try again with less examples? 
+                var tmpExamples = examples;
+                while (program == null && tmpExamples.Count() > 1)
+                {
+                    tmpExamples = tmpExamples.Skip((tmpExamples.Count() + 1) / 2);
+                    regionSession = new RegionSession();
+                    foreach (var example in tmpExamples)
+                    {
+                        var stringRegion = new StringRegion(example.Item1, Semantics.Tokens);
+                        var field = stringRegion.Slice(example.Item2, example.Item3);
+                        regionSession.AddConstraints(new RegionExample(stringRegion, field));
+                    }
+                    program = regionSession.Learn();
+                }
+
+                if (program == null)
+                {
+                    throw new Exception("No program found");
+                }
             }
 
             return new StructureExtractor(program);
