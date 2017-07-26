@@ -78,13 +78,23 @@
         currentrules.forEach(function (val) {
             if (val.file != activefile) console.error("rules not filtered out for file");
             var ruleid = "rule_" + val.field;
-            var html = "<li><span id='" + ruleid + "'>";
-            html += val.field;
-            if (val.startPos !== undefined) html = html + " (at " + val.startPos + "," + val.endPos + ");"
-            var buttonid = "rule_" + val.field;
-            var onclick = "selectRule('" + val.field + "'); return true;";
-            html += "</span ><button title=\"edit rule\" + id=\"" + buttonid + "\" onclick=\"" + onclick + "\"><span>Edit</span></button></li >";
-            if (activerule == val.field) { html += "<span>(selected)</span>"; }
+            var html = "<li>";
+            {
+                html += "<span id='" + ruleid + "'>";
+                {
+                    html += val.field;
+                    if (val.startPos !== undefined) html = html + " (at " + val.startPos + "," + val.endPos + ");"
+                }
+                html += "</span >";
+
+                if (activerule == val.field) { html += "<span>(selected)</span>"; }
+                else {
+                    var buttonid = "rule_" + val.field;
+                    var onclickEdit = "selectRule('" + val.field + "'); return true;";
+                    html += "<button title=\"edit rule\" + id=\"" + buttonid + "\" onclick=\"" + onclickEdit + "\"><span>Edit</span></button>";
+                }
+            }
+            html += "</li>";
             ruleList.append(html);
         });
     }
@@ -105,6 +115,38 @@
             field: activerule,
         }));
         refreshRules();
+    }
+    function renameRule() {
+        var ruleName = $(".rulename")[0].value;
+        if (!ruleName) throw "oops, enter a rule name please!";
+        if (activerule)
+        {
+            var ruleobj = currentrules.find(function (r) { r.field == activerule });
+            if (ruleobj !== undefined)
+            {
+                throw "oops, rule not selected?";
+            }
+
+            // rename server-side rules
+            $.ajax({
+                method: "POST",
+                url: "/s/" + sessionid + "/files/" + activefile + "/rules/" + activerule + "/rename",
+                accepts: "application/json",
+                contentType: "application/json",
+                dataType: "json",
+                data: JSON.stringify({
+                    name: ruleName
+                }),
+                error: function (a, b, c) {
+                    alert(a + b + c);
+                },
+                success: function (data, b, c) {
+                    gotRules(data);
+                }
+            });
+            ruleobj.field = ruleName;
+            activerule = ruleName;
+        }
     }
     function updateRule(ruleObj) {
         // update rule state, send to server...
@@ -150,8 +192,8 @@
 </script>
 
 <div class="container" style="width: 100pc">
-    <div style="margin-left: 0; width: 300px; height: 600px; float: left">
-        <div style="margin-left: 0; width: 300px; height: 300px; overflow: auto; ">
+    <div style="margin-left: 0; width: 300px; height: 800px; float: left">
+        <div style="margin-left: 0; width: 300px; height: 400px; overflow: auto; ">
             <nav>
                 @foreach (var doc in ViewBag.Documents)
                 {
@@ -161,9 +203,10 @@
                 }
             </nav>
         </div>
-        <div class="ruleholder "style="margin-left: 0; width: 300px; height: 300px; overflow: auto; ">
+        <div class="ruleholder "style="margin-left: 0; width: 300px; height: 400px; overflow: auto; ">
             <input class="rulename" type="text" maxlength="512" />
             <button class="addrule" title="add rule" onclick="addRule(); return true;"><span>add rule</span></button>
+            <button class="renamerule" title="rename rule" onclick="renameRule(); return true;"><span>rename selected rule</span></button>
             <ul class="rules">
             </ul >
         </div>

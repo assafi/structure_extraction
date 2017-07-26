@@ -26,6 +26,18 @@ namespace IndexIt
             );
 
             config.Routes.MapHttpRoute(
+                 name: "RenameRoute",
+                 routeTemplate: "s/{sid}/files/{file}/rules/{rule}/rename",
+                 defaults: new
+                 {
+                     controller = "Files",
+                     action = "Rename",
+                     file = RouteParameter.Optional,
+                     sid = 0,
+                 }
+             );
+
+            config.Routes.MapHttpRoute(
                 name: "RulesRoute",
                 routeTemplate: "s/{sid}/files/{file}/rules/{rule}",
                 defaults: new

@@ -32,6 +32,11 @@ namespace IndexIt.ApiControllers
         public string text;
     }
 
+    public class RenameRule
+    {
+        public string name;
+    }
+
     public class Match
     {
         public bool failed;
@@ -164,6 +169,17 @@ namespace IndexIt.ApiControllers
                 }
             }
             return ret;
+        }
+
+        // REMAME rule
+        [ActionName("Rename")]
+        [AcceptVerbs("POST")]
+        public RuleText Rename(int sid, string file, string rule, [FromBody] RenameRule body)
+        {
+            var rules = LoadRules(sid);
+            foreach (var ruleObj in rules.value) if (ruleObj.field == rule) ruleObj.field = body.name;
+            SaveRules(sid, rules);
+            return Get(sid, file);
         }
 
         // GET file
