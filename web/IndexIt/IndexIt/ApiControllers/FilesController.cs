@@ -115,6 +115,9 @@ namespace IndexIt.ApiControllers
             .Select(f => Path.GetFileNameWithoutExtension(f))
             .ToList();
 
+        // temporary perf hack
+        static Dictionary<string, Match> _matchesCache = new Dictionary<string, Match>();
+
         [NonAction]
         List<Match> GetMatches(int sid, string file)
         {
@@ -125,9 +128,18 @@ namespace IndexIt.ApiControllers
             {
                 var field = ruleGroup.Key;
                 var instances = ruleGroup.ToArray();
+
                 //var unmatchedFiles = GetFileNames().Except(instances.Select(inst => inst.file)).Distinct().ToArray();
                 if (instances.Any())
                 {
+                    string key = field + "@" + file + ":" + JsonConvert.SerializeObject(instances, Formatting.None);
+                    Match output;
+                    if (_matchesCache.TryGetValue(key, out output))
+                    {
+                        ret.Add(output);
+                        continue;
+                    }
+
                     var trainingExamples = instances
                         .Select(i => Tuple.Create(GetFileText(i.file), (uint)i.startPos, (uint)i.endPos))
                         .ToList();
@@ -143,17 +155,17 @@ namespace IndexIt.ApiControllers
                         if (actualText != null && match.Start >= 0)
                         {
                             string expectedText = fileText.Substring(match.Start, match.End - match.Start);
-                            ret.Add(
-                                new Match
-                                {
-                                    file = file,
-                                    field = field,
-                                    failed = false,
-                                    startPos = match.Start,
-                                    endPos = match.End,
-                                    text = actualText
-                                }
-                                );
+                            output = new Match
+                            {
+                                file = file,
+                                field = field,
+                                failed = false,
+                                startPos = match.Start,
+                                endPos = match.End,
+                                text = actualText
+                            };
+                            ret.Add(output);
+                            _matchesCache[key] = output;
                         }
                     }
                     catch (Exception)
