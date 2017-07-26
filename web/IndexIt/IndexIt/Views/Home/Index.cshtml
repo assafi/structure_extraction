@@ -50,8 +50,11 @@
                         if (!(match.failed)) {
                             var htmlColor = getRandomColor();
                             // highlight text that matched
-                            $("#word_" + match.startPos)
-                                .attr("style", "background-color:" + htmlColor);
+                            var pos;
+                            for (pos = match.startPos; pos < match.endPos; pos++) {
+                                $("#word_" + pos)
+                                    .attr("style", "background-color:" + htmlColor);
+                            }
                             // highlight rule that matched
                             $("#rule_" + match.field)
                                 .attr("style", "background-color:" + htmlColor);
