@@ -116,7 +116,7 @@ namespace IndexIt.ApiControllers
             .ToList();
 
         // temporary perf hack
-        static Dictionary<string, Match> _matchesCache = new Dictionary<string, Match>();
+        static Dictionary<string, StructureExtractor> _programsCache = new Dictionary<string, StructureExtractor>();
 
         [NonAction]
         List<Match> GetMatches(int sid, string file)
@@ -132,44 +132,44 @@ namespace IndexIt.ApiControllers
                 //var unmatchedFiles = GetFileNames().Except(instances.Select(inst => inst.file)).Distinct().ToArray();
                 if (instances.Any())
                 {
-                    string key = field + "@" + file + ":" + JsonConvert.SerializeObject(instances, Formatting.None);
-                    Match output;
-                    if (_matchesCache.TryGetValue(key, out output))
-                    {
-                        ret.Add(output);
-                        continue;
-                    }
+                    string key = field + "@" + JsonConvert.SerializeObject(instances, Formatting.None);
+                    StructureExtractor extractor;
+                    _programsCache.TryGetValue(key, out extractor);
 
                     var trainingExamples = instances
                         .Select(i => Tuple.Create(GetFileText(i.file), (uint)i.startPos, (uint)i.endPos))
                         .ToList();
                     string actualText = null;
-                    try
+                    if (extractor == null)
                     {
-                        var extractor = StructureExtractor.TrainExtractorAsync(
-                            trainingExamples,
-                            null).Result;
-                        var match = extractor.Extract(new Document[] {
-                        new Document { Id = file, Content = fileText.ToUpperInvariant() } }).FirstOrDefault();
-                        actualText = match?.Content;
-                        if (actualText != null && match.Start >= 0)
+                        try
                         {
-                            string expectedText = fileText.Substring(match.Start, match.End - match.Start);
-                            output = new Match
-                            {
-                                file = file,
-                                field = field,
-                                failed = false,
-                                startPos = match.Start,
-                                endPos = match.End,
-                                text = actualText
-                            };
-                            ret.Add(output);
-                            _matchesCache[key] = output;
+                            extractor = StructureExtractor.TrainExtractorAsync(
+                                trainingExamples,
+                                null).Result;
+                            _programsCache[key] = extractor;
+                        }
+                        catch (Exception)
+                        {
                         }
                     }
-                    catch (Exception)
+
+                    var match = extractor?.Extract(new Document[] {
+                        new Document { Id = file, Content = fileText.ToUpperInvariant() } }).FirstOrDefault();
+                    actualText = match?.Content;
+                    if (actualText != null && match.Start >= 0)
                     {
+                        string expectedText = fileText.Substring(match.Start, match.End - match.Start);
+                        var output = new Match
+                        {
+                            file = file,
+                            field = field,
+                            failed = false,
+                            startPos = match.Start,
+                            endPos = match.End,
+                            text = actualText
+                        };
+                        ret.Add(output);
                     }
 
                     if (String.IsNullOrEmpty(actualText))
