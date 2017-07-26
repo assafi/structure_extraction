@@ -138,7 +138,7 @@ namespace IndexIt.ApiControllers
                             trainingExamples,
                             null).Result;
                         var match = extractor.Extract(new Document[] {
-                        new Document { Id = file, Content = fileText } }).FirstOrDefault();
+                        new Document { Id = file, Content = fileText.ToUpperInvariant() } }).FirstOrDefault();
                         actualText = match?.Content;
                         if (actualText != null && match.Start >= 0)
                         {
