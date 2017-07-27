@@ -22,16 +22,19 @@ namespace StructureExtraction
             this.indexClient = indexClient;
         }
 
-        public DocumentSearchResult Search(string query)
+        public DocumentSearchResult Search(string field, string query)
         {
-            return this.indexClient.Documents.Search(query);
+            return this.indexClient.Documents.Search(query, new SearchParameters
+            {
+                SearchFields = new List<string> { field }
+            });
         }
 
         public DocumentSearchResult Facets(string field)
         {
             return this.indexClient.Documents.Search("*", new SearchParameters
             {
-                Facets = new List<string> {field}
+                Facets = new List<string> { field }
             });
         }
 
@@ -44,7 +47,8 @@ namespace StructureExtraction
         }
 
         public static HackIndex BuildIndex(string serviceName, string adminKey, string queryKey, 
-            string indexName, Dictionary<string, string>[] documents, string keyField, ISet<string> filterFields, 
+            string indexName, IEnumerable<Document> documents, string keyField, 
+            ISet<string> filterFields, 
             ISet<string> facetableFields, ISet<string> searchableFields, ISet<string> sortableFields)
         {
             SearchServiceClient serviceClient = CreateSearchServiceClient(serviceName, adminKey);
@@ -53,8 +57,14 @@ namespace StructureExtraction
             DeleteIndexIfExists(serviceClient, indexName);
 
             Console.WriteLine($"Creating index {indexName}...");
-            CreateIndex(serviceClient, indexName, 
-                documents.First().Keys.Select(f => new Field(f, DataType.String)).ToList(),
+
+            var fields = documents.First().Fields.Keys.Select(f => new Field(f, DataType.String)).ToList();
+            fields.Add(new Field(keyField, DataType.String));
+            fields.Add(new Field("Content", DataType.String));
+            CreateIndex(
+                serviceClient, 
+                indexName, 
+                fields,
                 keyField,
                 filterFields,
                 facetableFields,
@@ -64,7 +74,7 @@ namespace StructureExtraction
             ISearchIndexClient indexClient = serviceClient.Indexes.GetClient(indexName);
 
             Console.WriteLine("Uploading documents...");
-            UploadDocuments(indexClient, documents);
+            UploadDocuments("FileName", indexClient, documents);
 
             return new HackIndex(CreateSearchServiceClient(serviceName, indexName, queryKey));
         }
@@ -111,16 +121,20 @@ namespace StructureExtraction
             serviceClient.Indexes.Create(definition);
         }
 
-        private static void UploadDocuments(ISearchIndexClient indexClient,
-            IEnumerable<IDictionary<string, string>> documents)
+        private static void UploadDocuments(
+            string keyField,
+            ISearchIndexClient indexClient,
+            IEnumerable<Document> documents)
         {
             var docs = documents.Select(d =>
             {
                 var doc = new Microsoft.Azure.Search.Models.Document();
-                foreach (var field in d.Keys)
+                foreach (var field in d.Fields.Keys)
                 {
-                    doc[field] = d[field];
+                    doc[field] = d.Fields[field];
                 }
+                doc[keyField] = d.Id;
+                doc["Content"] = d.Content;
                 return doc;
             });
 

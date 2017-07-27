@@ -4,105 +4,181 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using Microsoft.Extensions.Configuration;
+    using Microsoft.ProgramSynthesis.Utils;
+    using Newtonsoft.Json.Linq;
 
     public class Program
     {
         public static void Main(string[] args)
         {
-            string trainingFolderPath = @"F:\Hackathon\FormatExtraction\train";
-            string testFolderPath = @"F:\Hackathon\FormatExtraction\score";
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json");
+
+            var config = builder.Build();
+
+            bool pause = bool.Parse(config["Pause"]);
+
+            string trainingFolderPath = config["trainingFolderPath"];
+            string testFolderPath = config["testFolderPath"];
             var trainingFolder = new DirectoryInfo(trainingFolderPath);
 
-            var examples = new List<Tuple<string, uint, uint>>();
-
-            if (args.Length != 5)
+            var extractorPerAnnotationLabel = new Dictionary<string, StructureExtractor>();
+            foreach (var annotationType in config.GetSection("AnnotationTypes").GetChildren())
             {
-                throw new ArgumentException($"Usage: az-search-service az-search-admin-key az-search-query-key label label-value");
-            }
+                var examples = new List<Tuple<string, uint, uint>>();
 
-            var labelPrefixText = args[3];
+                var labelPrefixText = annotationType["PrefixString"];
+                var labelFieldName = annotationType["Label"];
 
-            foreach (var trainingFile in trainingFolder.EnumerateFiles())
-            {
-                using (var sr = new StreamReader(trainingFile.OpenRead()))
+                Console.Out.WriteLine($"Reading training folder {trainingFolderPath}");
+                foreach (var trainingFile in trainingFolder.EnumerateFiles())
                 {
-                    var exampleContent = sr.ReadToEnd().ToLowerInvariant();
-
-                    if (exampleContent.IndexOf(labelPrefixText, StringComparison.OrdinalIgnoreCase) < 0)
+                    using (var sr = new StreamReader(trainingFile.OpenRead()))
                     {
-                        continue;
-                    }
+                        var exampleContent = sr.ReadToEnd().ToLowerInvariant();
 
-                    int startIndex = exampleContent.IndexOf(labelPrefixText, StringComparison.OrdinalIgnoreCase) + labelPrefixText.Length;
-                    int endIndex = startIndex + exampleContent.Substring(startIndex+1).IndexOf("\n");
-                    examples.Add(Tuple.Create(exampleContent, (uint)startIndex, (uint)endIndex));
+                        if (exampleContent.IndexOf(labelPrefixText, StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            continue;
+                        }
+
+                        int startIndex = exampleContent.IndexOf(labelPrefixText, StringComparison.OrdinalIgnoreCase) + labelPrefixText.Length;
+                        int endIndex = startIndex + exampleContent.Substring(startIndex).IndexOf("\n");
+                        examples.Add(Tuple.Create(exampleContent, (uint)startIndex, (uint)endIndex));
+                        Console.Out.WriteLine($"PROSE sample for {labelFieldName} {trainingFile} [{startIndex} , {endIndex} , \"{exampleContent.Substring(startIndex, endIndex - startIndex)}\"]");
+                    }
                 }
+
+                var noneLabeledExamples = new List<string>();
+                foreach (var testFile in new DirectoryInfo(testFolderPath).EnumerateFiles().Take(20))
+                {
+                    using (var sr = new StreamReader(testFile.OpenRead()))
+                    {
+                        noneLabeledExamples.Add(sr.ReadToEnd().ToLowerInvariant());
+                    }
+                }
+
+                Console.Out.WriteLine();
+                Console.Out.Write($"Learning extraction logic for '{labelFieldName}'...");
+
+                var extractor = StructureExtractor.TrainExtractorAsync(labelFieldName, examples, noneLabeledExamples).Result;
+                Console.Out.WriteLine(" Done");
+                extractorPerAnnotationLabel[labelFieldName] = extractor;
+                Console.Out.WriteLine();
             }
 
+            if (pause)
+            {
+                Console.Out.WriteLine("Press any key to continue...");
+                Console.ReadKey();
+            }
+
+            Console.Out.WriteLine($"Processing documents from folder {testFolderPath}");
             var documents = new List<Document>();
-            // Test on real samples
             foreach (var testFile in new DirectoryInfo(testFolderPath).EnumerateFiles())
             {
                 using (var sr = new StreamReader(testFile.OpenRead()))
                 {
                     documents.Add(new Document
                     {
-                        Id = testFile.Name,
+                        Id = testFile.Name.Replace(".txt",""),
                         Content = sr.ReadToEnd().ToLowerInvariant()
                     });
                 }
             }
 
-            var labelFieldName =
-                args[3].ToLowerInvariant().Replace(":", "").Replace("\n", "").Replace("\r", "").Trim().Replace(" ", "_");
-
-            Console.Out.WriteLine();
-            Console.Out.Write($"Learning extraction logic for '{labelFieldName}'...");
-
-            var noneLabeledExamples = documents.Select(sc => sc.Content).Take(20);
-            var extractor = StructureExtractor.TrainExtractorAsync(examples, noneLabeledExamples).Result;
-            Console.Out.WriteLine(" Done");
-            Console.Out.WriteLine();
-
-            Console.Out.WriteLine($"Extracting '{args[3]}' from documents...");
-            var extractions = extractor.Extract(documents).Result;
-            foreach (var extraction in extractions)
+            foreach (var annotationLabel in extractorPerAnnotationLabel.Keys)
             {
-                Console.Out.WriteLine($"File: {extraction.Item1.Id}, Extract: {extraction.Item2.Content}");
+                Console.Out.WriteLine($"Extracting '{annotationLabel}' from documents...");
+                extractorPerAnnotationLabel[annotationLabel].Extract(documents).Wait();
+                foreach (var d in documents)
+                {
+                    Console.Out.WriteLine($"File: {d.Id}, Extract: {d.Fields[annotationLabel]}");
+                }
+
+                if (pause)
+                {
+                    Console.Out.WriteLine("Press any key to continue...");
+                    Console.ReadKey();
+                }
             }
 
             Console.Out.WriteLine("Indexing...");
 
+            var filterableFields = GetAnnotationTypeWithProperty(extractorPerAnnotationLabel.Keys, "Filterable", config);
+            var facetableFields = GetAnnotationTypeWithProperty(extractorPerAnnotationLabel.Keys, "Facetable", config);
+            var sortableFields = GetAnnotationTypeWithProperty(extractorPerAnnotationLabel.Keys, "Sortable", config);
+            sortableFields.Add("FileName");
+            var searchableFields = GetAnnotationTypeWithProperty(extractorPerAnnotationLabel.Keys, "Searchable", config);
+            searchableFields.Add("Content");
+
             var index = HackIndex.BuildIndex(
-                args[0],
-                args[1],
-                args[2],
-                "medicalrecords", extractions.Select(e => new Dictionary<string, string>
-            {
-                { "FileName", e.Item1.Id.Replace(".txt", "") },
-                { "Content" , e.Item1.Content },
-                { labelFieldName , e.Item2.Content }
-            }).ToArray(),
-            "FileName",
-            new HashSet<string>(new [] { "FileName", labelFieldName }),
-            new HashSet<string>(new[] { labelFieldName }),
-            new HashSet<string>(new[] { labelFieldName, "Content" }),
-            new HashSet<string>(new[] { "FileName", labelFieldName })
+                config["SearchServiceName"],
+                config["SearchServiceAdminApiKey"],
+                config["SearchServiceQueryApiKey"],
+                config["IndexName"],
+                documents,
+                "FileName",
+                filterableFields,
+                facetableFields,
+                searchableFields,
+                sortableFields
             );
 
-            Console.Out.WriteLine("Querying...");
-            var response = index.Facets(labelFieldName, args[4]);
+            if (pause)
+            {
+                Console.Out.WriteLine("Press any key to continue...");
+                Console.ReadKey();
+            }
 
-            Console.Out.WriteLine($"labelFieldName values: ");
-            var countDocs =
-                response.Results.Count;
-            var ids = response.Results.Select(d => d.Document["FileName"]);
-            Console.Out.WriteLine($"Found {countDocs} records with the {args[4]} {labelFieldName}");
-            Console.Out.WriteLine("File names:");
-            Console.Out.WriteLine(string.Join(Environment.NewLine, ids));
-            Console.Out.WriteLine("");
+            Console.Out.WriteLine("Querying...");
+
+            foreach (var annotationLabel in extractorPerAnnotationLabel.Keys)
+            {
+                var query = config.GetSection(annotationLabel)["Query"];
+                Console.Out.WriteLine($"Querying {annotationLabel} for value '{query}'...");
+
+                if (bool.Parse(config.GetSection(annotationLabel)["Facetable"]))
+                {
+                    Console.Out.WriteLine($"Facet query for {annotationLabel} with query {query}...");
+                    var response = index.Facets(annotationLabel, query);
+                    var countDocs =
+                        response.Results.Count;
+                    var ids = response.Results.Select(d => d.Document["FileName"]);
+                    Console.Out.WriteLine($"Found {countDocs} records with the {annotationLabel} '{query}'");
+                    Console.Out.WriteLine("File names:");
+                    Console.Out.WriteLine(string.Join(Environment.NewLine, ids));
+                    Console.Out.WriteLine("");
+                }
+                else if (bool.Parse(config.GetSection(annotationLabel)["Searchable"]))
+                {
+                    Console.Out.WriteLine($"Search query for '{query}'");
+                    var response = index.Search(annotationLabel, query);
+                    var countDocs =
+                        response.Results.Count;
+                    var ids = response.Results.Select(d => d.Document["FileName"]);
+                    Console.Out.WriteLine($"Found {countDocs} records.");
+                    Console.Out.WriteLine("File names:");
+                    Console.Out.WriteLine(string.Join(Environment.NewLine, ids));
+                    Console.Out.WriteLine("");
+                }
+
+                if (pause)
+                {
+                    Console.Out.WriteLine("Press any key to continue...");
+                    Console.ReadKey();
+                }
+            }
+            
             Console.Out.WriteLine("Finished. Press any key to exit and grab a beer...");
             Console.ReadKey();
+        }
+
+        private static ISet<string> GetAnnotationTypeWithProperty(IEnumerable<string> annotationTypes, string property, IConfiguration config)
+        {
+            return annotationTypes.Where(aType => bool.Parse(config.GetSection(aType)[property])).ToHashSet();
         }
     }
 }
